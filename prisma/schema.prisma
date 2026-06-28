@@ -1,0 +1,622 @@
+// Luxe Salon Platform - Database Schema
+// PostgreSQL with Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// ENUMS
+// ──────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  STYLIST
+  RECEPTIONIST
+  MANAGER
+  SUPER_ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  STRIPE
+  RAZORPAY
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMATION
+  APPOINTMENT_REMINDER
+  RESCHEDULE
+  CANCELLATION
+  PAYMENT_RECEIVED
+  PROMOTIONAL
+  REVIEW_REQUEST
+  LOW_INVENTORY
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ──────────────────────────────────────────────
+// USER & AUTH
+// ──────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatarUrl     String?
+  role          UserRole  @default(CUSTOMER)
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  customer      Customer?
+  stylist       Stylist?
+  sessions      Session[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ──────────────────────────────────────────────
+// CUSTOMER
+// ──────────────────────────────────────────────
+
+model Customer {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  dateOfBirth       DateTime?
+  notes             String?
+  loyaltyPoints     Int       @default(0)
+  totalVisits       Int       @default(0)
+  totalSpent        Float     @default(0)
+  referralCode      String?   @unique
+  referredById      String?
+  favoriteStylistId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referredBy      Customer?            @relation("CustomerReferrals", fields: [referredById], references: [id])
+  referrals       Customer[]           @relation("CustomerReferrals")
+  favoriteStylist Stylist?             @relation("FavoriteCustomers", fields: [favoriteStylistId], references: [id])
+  appointments    Appointment[]
+  payments        Payment[]
+  reviews         Review[]
+  memberships     CustomerMembership[]
+  coupons         CustomerCoupon[]
+
+  @@index([userId])
+  @@index([loyaltyPoints])
+  @@map("customers")
+}
+
+// ──────────────────────────────────────────────
+// STYLIST
+// ──────────────────────────────────────────────
+
+model Stylist {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  bio            String?
+  specialties    String[]
+  commissionRate Float     @default(0.4)
+  rating         Float     @default(0)
+  reviewCount    Int       @default(0)
+  sortOrder      Int       @default(0)
+  isFeatured     Boolean   @default(false)
+  instagramUrl   String?
+  portfolioUrl   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services          Service[]      @relation("StylistServices")
+  appointments      Appointment[]
+  availability      Availability[]
+  leaveRequests     LeaveRequest[]
+  reviews           Review[]
+  favoriteCustomers Customer[]     @relation("FavoriteCustomers")
+
+  @@index([userId])
+  @@index([rating])
+  @@map("stylists")
+}
+
+// ──────────────────────────────────────────────
+// SERVICES & CATEGORIES
+// ──────────────────────────────────────────────
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  services Service[]
+
+  @@index([slug])
+  @@map("categories")
+}
+
+model Service {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String?
+  price         Float
+  duration      Int // minutes
+  categoryId    String
+  imageUrl      String?
+  isActive      Boolean   @default(true)
+  isPopular     Boolean   @default(false)
+  depositAmount Float     @default(0)
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  category            Category             @relation(fields: [categoryId], references: [id])
+  stylists            Stylist[]            @relation("StylistServices")
+  appointmentServices AppointmentService[] @relation("AppointmentServices")
+  packageItems        ServicePackageItem[] @relation("ServicePackageItems")
+  inventoryUsage      InventoryUsage[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([price])
+  @@map("services")
+}
+
+model ServicePackage {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String?
+  price         Float
+  originalPrice Float
+  imageUrl      String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items ServicePackageItem[]
+
+  @@index([slug])
+  @@map("service_packages")
+}
+
+model ServicePackageItem {
+  id        String         @id @default(cuid())
+  packageId String
+  serviceId String
+  quantity  Int            @default(1)
+  package   ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  service   Service        @relation("ServicePackageItems", fields: [serviceId], references: [id])
+
+  @@unique([packageId, serviceId])
+  @@map("service_package_items")
+}
+
+// ──────────────────────────────────────────────
+// APPOINTMENTS
+// ──────────────────────────────────────────────
+
+model Appointment {
+  id                 String            @id @default(cuid())
+  bookingRef         String            @unique
+  customerId         String
+  stylistId          String?
+  status             AppointmentStatus @default(PENDING)
+  date               DateTime
+  startTime          DateTime
+  endTime            DateTime
+  notes              String?
+  cancellationReason String?
+  isWalkIn           Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+
+  // Relations
+  customer Customer             @relation(fields: [customerId], references: [id])
+  stylist  Stylist?             @relation(fields: [stylistId], references: [id])
+  services AppointmentService[]
+  payment  Payment?
+
+  @@index([bookingRef])
+  @@index([customerId])
+  @@index([stylistId])
+  @@index([date])
+  @@index([status])
+  @@index([startTime, endTime])
+  @@map("appointments")
+}
+
+model AppointmentService {
+  id            String  @id @default(cuid())
+  appointmentId String
+  serviceId     String
+  price         Float
+  duration      Int
+  notes         String?
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service     Service     @relation("AppointmentServices", fields: [serviceId], references: [id])
+
+  @@index([appointmentId])
+  @@map("appointment_services")
+}
+
+// ──────────────────────────────────────────────
+// PAYMENTS & INVOICES
+// ──────────────────────────────────────────────
+
+model Payment {
+  id              String         @id @default(cuid())
+  appointmentId   String         @unique
+  customerId      String
+  amount          Float
+  taxAmount       Float          @default(0)
+  discountAmount  Float          @default(0)
+  totalAmount     Float
+  depositAmount   Float          @default(0)
+  status          PaymentStatus  @default(PENDING)
+  method          PaymentMethod?
+  stripePaymentId String?
+  invoiceNumber   String         @unique
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  refundAmount    Float?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  customer    Customer    @relation(fields: [customerId], references: [id])
+
+  @@index([appointmentId])
+  @@index([customerId])
+  @@index([invoiceNumber])
+  @@index([status])
+  @@map("payments")
+}
+
+// ──────────────────────────────────────────────
+// REVIEWS
+// ──────────────────────────────────────────────
+
+model Review {
+  id            String    @id @default(cuid())
+  customerId    String
+  stylistId     String?
+  appointmentId String?   @unique
+  rating        Int
+  comment       String?
+  response      String?
+  respondedAt   DateTime?
+  isPublic      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  stylist  Stylist? @relation(fields: [stylistId], references: [id])
+
+  @@index([customerId])
+  @@index([stylistId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+// ──────────────────────────────────────────────
+// COUPONS & MEMBERSHIPS
+// ──────────────────────────────────────────────
+
+model Coupon {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  description   String?
+  discountType  String // PERCENTAGE or FIXED
+  discountValue Float
+  minPurchase   Float?
+  maxDiscount   Float?
+  usageLimit    Int?
+  usedCount     Int      @default(0)
+  validFrom     DateTime
+  validUntil    DateTime
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customers CustomerCoupon[]
+
+  @@index([code])
+  @@map("coupons")
+}
+
+model CustomerCoupon {
+  id         String    @id @default(cuid())
+  customerId String
+  couponId   String
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  coupon   Coupon   @relation(fields: [couponId], references: [id])
+
+  @@unique([customerId, couponId])
+  @@map("customer_coupons")
+}
+
+model MembershipPlan {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  price       Float // monthly price
+  duration    Int // months
+  services    String[] // included service names
+  discount    Float // percentage discount on other services
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customers CustomerMembership[]
+
+  @@index([slug])
+  @@map("membership_plans")
+}
+
+model CustomerMembership {
+  id         String   @id @default(cuid())
+  customerId String
+  planId     String
+  startDate  DateTime
+  endDate    DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer       @relation(fields: [customerId], references: [id])
+  plan     MembershipPlan @relation(fields: [planId], references: [id])
+
+  @@index([customerId])
+  @@map("customer_memberships")
+}
+
+// ──────────────────────────────────────────────
+// AVAILABILITY & SCHEDULING
+// ──────────────────────────────────────────────
+
+model Availability {
+  id          String   @id @default(cuid())
+  stylistId   String
+  dayOfWeek   Int // 0=Sunday, 6=Saturday
+  startTime   String // "09:00"
+  endTime     String // "18:00"
+  breakStart  String? // "12:00"
+  breakEnd    String? // "13:00"
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stylist Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  @@unique([stylistId, dayOfWeek])
+  @@index([stylistId])
+  @@map("availability")
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  stylistId    String
+  startDate    DateTime
+  endDate      DateTime
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  stylist Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  @@index([stylistId])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+model BlockedDate {
+  id        String   @id @default(cuid())
+  stylistId String
+  date      DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([stylistId, date])
+  @@index([stylistId])
+  @@map("blocked_dates")
+}
+
+// ──────────────────────────────────────────────
+// NOTIFICATIONS
+// ──────────────────────────────────────────────
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  type      NotificationType
+  channel   NotificationChannel
+  title     String
+  message   String
+  isRead    Boolean             @default(false)
+  metadata  Json?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ──────────────────────────────────────────────
+// INVENTORY
+// ──────────────────────────────────────────────
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  name          String
+  sku           String    @unique
+  category      String?
+  description   String?
+  quantity      Int       @default(0)
+  minQuantity   Int       @default(5)
+  unitPrice     Float
+  supplierName  String?
+  supplierEmail String?
+  supplierPhone String?
+  imageUrl      String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  usage InventoryUsage[]
+
+  @@index([sku])
+  @@index([quantity])
+  @@map("inventory_items")
+}
+
+model InventoryUsage {
+  id              String   @id @default(cuid())
+  inventoryItemId String
+  serviceId       String
+  quantityUsed    Int      @default(1)
+  createdAt       DateTime @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  service       Service       @relation(fields: [serviceId], references: [id])
+
+  @@index([inventoryItemId])
+  @@index([serviceId])
+  @@map("inventory_usage")
+}
+
+// ──────────────────────────────────────────────
+// AUDIT LOG
+// ──────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ──────────────────────────────────────────────
+// WAITLIST
+// ──────────────────────────────────────────────
+
+model WaitlistEntry {
+  id            String   @id @default(cuid())
+  customerId    String
+  serviceId     String
+  preferredDate DateTime
+  preferredTime String?
+  stylistId     String?
+  status        String   @default("WAITING") // WAITING, NOTIFIED, BOOKED, EXPIRED
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@map("waitlist_entries")
+}

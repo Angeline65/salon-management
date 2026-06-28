@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 33% 97%;
+    --foreground: 0 0% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 17%;
+    --primary: 43 60% 50%;
+    --primary-foreground: 0 0% 17%;
+    --secondary: 36 20% 93%;
+    --secondary-foreground: 0 0% 17%;
+    --muted: 36 20% 93%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 36 20% 93%;
+    --accent-foreground: 0 0% 17%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 36 15% 88%;
+    --input: 36 15% 88%;
+    --ring: 43 60% 50%;
+    --radius: 0.75rem;
+
+    /* Custom palette */
+    --gold: 43 45% 58%;
+    --gold-light: 43 50% 66%;
+    --gold-dark: 43 40% 47%;
+    --gold-muted: 43 30% 90%;
+    --charcoal: 0 0% 17%;
+    --charcoal-light: 0 0% 29%;
+    --charcoal-lighter: 0 0% 45%;
+    --cream: 36 33% 97%;
+    --cream-dark: 36 20% 93%;
+
+    /* Typography */
+    --font-display: "Cormorant Garamond", serif;
+    --font-body: "DM Sans", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-cream text-charcoal font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .gold-gradient {
+    background: linear-gradient(135deg, hsl(43 50% 66%), hsl(43 45% 58%), hsl(43 40% 47%));
+  }
+
+  .text-gold-gradient {
+    background: linear-gradient(135deg, hsl(43 50% 66%), hsl(43 45% 58%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
